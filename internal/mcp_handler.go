@@ -1,11 +1,24 @@
 package internal
 
 import (
+	"encoding/json"
 	"log/slog"
 	"net/http"
 
-	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+func healthHandler(writer http.ResponseWriter, _ *http.Request) {
+	var (
+		encoder  *json.Encoder
+		response map[string]string
+	)
+
+	writer.WriteHeader(http.StatusOK)
+	encoder = json.NewEncoder(writer)
+	response = map[string]string{"status": "ok"}
+	_ = encoder.Encode(response)
+}
 
 func getServer(_ *http.Request) *mcp.Server {
 	var (
@@ -34,15 +47,16 @@ func getServer(_ *http.Request) *mcp.Server {
 
 func handler(logger *slog.Logger) http.Handler {
 	var (
-		handler       *mcp.StreamableHTTPHandler
+		mcpHandler    *mcp.StreamableHTTPHandler
 		mux           *http.ServeMux
 		serverOptions *mcp.StreamableHTTPOptions
 	)
 
 	serverOptions = &mcp.StreamableHTTPOptions{Logger: logger}
-	handler = mcp.NewStreamableHTTPHandler(getServer, serverOptions)
+	mcpHandler = mcp.NewStreamableHTTPHandler(getServer, serverOptions)
 	mux = http.NewServeMux()
-	mux.Handle("/mcp", handler)
+	mux.HandleFunc("GET /health", healthHandler)
+	mux.Handle("/mcp", mcpHandler)
 
 	return mux
 }
