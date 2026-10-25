@@ -6,15 +6,13 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-type VersionToolInput struct{}
+type versionToolInput struct{}
 
-type VersionToolOutput struct {
+type versionToolOutput struct {
 	Version string `mapstructure:"version" json:"version" yaml:"version"`
 }
 
-func VersionToolHandler(_ context.Context, _ *mcp.CallToolRequest, _ VersionToolInput) (*mcp.CallToolResult, VersionToolOutput, error) {
-	var output VersionToolOutput
-
-	output = VersionToolOutput{Version: "hello world"}
+func versionToolHandler(_ context.Context, _ *mcp.CallToolRequest, _ versionToolInput) (*mcp.CallToolResult, versionToolOutput, error) {
+	var output = versionToolOutput{Version: "hello world"}
 	return nil, output, nil
 }
