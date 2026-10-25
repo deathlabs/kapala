@@ -3,8 +3,8 @@ name: CI/CD
 
 on:
   push:
-    branches:
-      - '**'
+    tags:
+      - '*.*.*'
   workflow_dispatch:
     inputs:
       sbom_scan_failure_threshold:
@@ -16,10 +16,9 @@ on:
     - cron: '00 12 * * *'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-
   secrets:
     name: Secrets Scan
     runs-on: ubuntu-latest
