@@ -39,7 +39,7 @@ func getServer(_ *http.Request) *mcp.Server {
 			Name:        "version",
 			Description: "Get the build version.",
 		},
-		VersionToolHandler,
+		versionToolHandler,
 	)
 
 	return server
