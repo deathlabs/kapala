@@ -4,109 +4,77 @@ name: CI/CD
 on:
   push:
     tags:
-      - '*.*.*'
+      - "*.*.*"
   workflow_dispatch:
     inputs:
       sbom_scan_failure_threshold:
         description: "Threshold to fail the SBOM scan."
         type: choice
-        options: [low, high, critical]
-        default: low
+        options:
+          - low
+          - medium
+          - high
+          - critical
+        default: medium
   schedule:
-    - cron: '00 12 * * *'
+    - cron: "00 12 * * *"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  secrets:
-    name: Secrets Scan
+  ci:
+    name: CI/CD Pipeline
     runs-on: ubuntu-latest
-    steps:
-      - name: Clone the repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Run Trufflehog
-        id: trufflehog
-        uses: trufflesecurity/trufflehog@f714bf454f350590f4a24c3ddb1aef02c35bf5b6 # v3.97.5
-        continue-on-error: false
 
-  code-lint:
-    name: Code Lint Scan
-    runs-on: ubuntu-latest
+    env:
+      GRYPE_FAILURE_THRESHOLD: ${{ github.event.inputs.sbom_scan_failure_threshold || 'medium' }}
+
     steps:
-      - name: Checkout code
+      - name: Clone Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
       - name: Install Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.2'
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
-        with:
-          args: --output.sarif.path kapala-lint-scan.sarif
-      - name: Print Code Lint Scan
-        if: always()
-        run: cat kapala-lint-scan.sarif
+          go-version: "1.26.2"
 
-  sast:
-    name: SAST Scan
-    runs-on: ubuntu-latest
-    container:
-      image: semgrep/semgrep
-    steps:
-      - name: Clone Repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Run Semgrep
-        run: semgrep scan --config auto . --sarif --sarif-output=kapala-sast-scan.sarif
-      - name: Print SAST Scan
-        if: always()
-        run: cat kapala-sast-scan.sarif
-      - name: Upload SAST Scan
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          path: kapala-sast-scan.sarif
-          archive: false
+      - name: Install golangci-lint
+        run: |
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
-  sca:
-    name: SBOM Scan
-    runs-on: ubuntu-latest
-    permissions:
-      actions: read
-      contents: write
-    steps:
-      - name: Clone Repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Run Syft
-        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
-        with:
-          path: .
-          format: cyclonedx-json
-          output-file: kapala-sbom.json
-          artifact-name: kapala-sbom.json
-      - name: Run Grype
+      - name: Install Semgrep
+        run: pipx install semgrep
+
+      - name: Install TruffleHog
+        run: |
+          curl -sSfL \
+            https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh \
+            | sudo sh -s -- -b /usr/local/bin v3.97.5
+
+      - name: Install yq
+        run: |
+          sudo wget \
+            https://github.com/mikefarah/yq/releases/download/v4.53.6/yq_linux_amd64 \
+            -O /usr/local/bin/yq
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Install Syft
+        id: syft
+        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+
+      - name: Add Syft to PATH
+        run: echo "$(dirname '${{ steps.syft.outputs.cmd }}')" >> "$GITHUB_PATH"
+
+      - name: Install Grype
         id: grype
-        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
-        with:
-          sbom: kapala-sbom.json
-          vex: ${{ hashFiles('.github/vex/kapala-vex.json') != '' && '.github/vex/kapala-vex.json' || '' }}
-          severity-cutoff: ${{ github.event.inputs.sbom_scan_failure_threshold || 'low' }}
-          output-format: cyclonedx-json
-          output-file: kapala-sbom-scan.json
-          fail-build: true
-      - name: Print SBOM Scan
-        if: always()
-        run: jq -r '
-            (.vulnerabilities // [])[] |
-            [
-              ((.ratings[]? | select(.severity != null) | .severity) // "unknown"),
-              .id,
-              (try ((.affects[0].ref // "") | capture("pkg:(?<pkg>[^?]+)").pkg) catch "unknown")
-            ] | @tsv
-          ' kapala-sbom-scan.json | sort | column -t
-      - name: Upload SBOM Scan
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          path: kapala-sbom-scan.json
-          archive: false
+        uses: anchore/scan-action/download-grype@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+
+      - name: Add Grype to PATH
+        run: echo "$(dirname '${{ steps.grype.outputs.cmd }}')" >> "$GITHUB_PATH"
+
+      - name: Run CI/CD Pipeline
+        run: make build
