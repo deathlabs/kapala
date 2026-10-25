@@ -13,8 +13,6 @@ type VersionToolOutput struct {
 }
 
 func VersionToolHandler(_ context.Context, _ *mcp.CallToolRequest, _ VersionToolInput) (*mcp.CallToolResult, VersionToolOutput, error) {
-	var output VersionToolOutput
-
-	output = VersionToolOutput{Version: "hello world"}
+	var output = VersionToolOutput{Version: "hello world"}
 	return nil, output, nil
 }
