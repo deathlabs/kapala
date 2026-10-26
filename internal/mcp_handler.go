@@ -23,7 +23,7 @@ func healthHandler(writer http.ResponseWriter, _ *http.Request) {
 }
 
 // getServer returns an MCP server to handle MCP requests.
-func getServer(_ *http.Request) *mcp.Server {
+func getServer(_ *http.Request, tools *retrievalTools) *mcp.Server {
 	var (
 		logger *slog.Logger
 		server *mcp.Server
@@ -40,31 +40,51 @@ func getServer(_ *http.Request) *mcp.Server {
 	// Log every tool call the MCP server receives.
 	server.AddReceivingMiddleware(ToolCallLoggingMiddleware(logger))
 
-	// Register tools with the MCP server.
+	// Register semantic search tools.
 	mcp.AddTool(
 		server,
 		&mcp.Tool{
-			Name:        "version",
-			Description: "Get the build version.",
+			Name:        "semantic_search",
+			Description: "Search indexed Markdown chunks by semantic similarity.",
 		},
-		versionToolHandler,
+		tools.semanticSearchHandler,
+	)
+	mcp.AddTool(
+		server,
+		&mcp.Tool{
+			Name:        "list_indexed_files",
+			Description: "List normalized relative paths for Markdown files in the live semantic index.",
+		},
+		tools.listIndexedFilesHandler,
+	)
+	mcp.AddTool(
+		server,
+		&mcp.Tool{
+			Name:        "get_file_content",
+			Description: "Get the full content of an indexed Markdown file by its normalized relative path.",
+		},
+		tools.getFileContentHandler,
 	)
 
 	return server
 }
 
 // handler returns an HTTP handler that routes and logs requests.
-func handler(logger *slog.Logger) http.Handler {
+func handler(logger *slog.Logger, tools *retrievalTools) http.Handler {
 	var (
 		loggingHandler http.HandlerFunc
 		mcpHandler     *mcp.StreamableHTTPHandler
 		mux            *http.ServeMux
+		serverFactory  func(*http.Request) *mcp.Server
 		serverOptions  *mcp.StreamableHTTPOptions
 	)
 
 	// Create an MCP handler.
 	serverOptions = &mcp.StreamableHTTPOptions{Logger: logger}
-	mcpHandler = mcp.NewStreamableHTTPHandler(getServer, serverOptions)
+	serverFactory = func(request *http.Request) *mcp.Server {
+		return getServer(request, tools)
+	}
+	mcpHandler = mcp.NewStreamableHTTPHandler(serverFactory, serverOptions)
 
 	// Create an HTTP router.
 	mux = http.NewServeMux()

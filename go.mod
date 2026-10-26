@@ -3,6 +3,8 @@ module github.com/deathlabs/kapala
 go 1.26.6
 
 require (
+	github.com/fsnotify/fsnotify v1.9.0
+	github.com/joho/godotenv v1.5.1
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/spf13/cobra v1.10.2
 )
